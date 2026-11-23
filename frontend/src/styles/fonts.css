@@ -1,0 +1,5 @@
+/* 英文与数字使用本地 Inter（高锐度 + 原生等宽数字），中文无缝回退至系统原生高清晰字体（PingFang SC / Microsoft YaHei UI） */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';

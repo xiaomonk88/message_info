@@ -1,0 +1,50 @@
+# Data (must be on host volume)
+data/db/*
+data/uploads/*
+data/backups/*
+data/secrets/
+!data/db/.gitkeep
+!data/uploads/.gitkeep
+!data/backups/.gitkeep
+
+# Backups & archives (never commit local archives)
+.backup/
+*.rar
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+backend/tmp/
+backend/static/
+
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+frontend/_shots/
+
+# IDE & Agent state
+.vscode/
+.idea/
+.claude/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

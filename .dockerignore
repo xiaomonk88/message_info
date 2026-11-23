@@ -1,0 +1,40 @@
+# 不要把本机环境、数据和备份发进 Docker 构建上下文
+# （Windows 的 node_modules / .venv 进到 Linux 镜像会导致构建失败或镜像臃肿）
+
+# 数据与备份：由 docker-compose 以卷的形式挂载，绝不能打进镜像
+data/
+.backup/
+*.rar
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+
+# 密钥
+.env
+.env.*
+!.env.example
+
+# 前端本地依赖与产物（镜像内会重新 npm ci + build）
+frontend/node_modules/
+frontend/dist/
+frontend/_shots/
+frontend/*.log
+
+# 后端本地环境
+backend/.venv/
+backend/tmp/
+backend/static/
+backend/*.log
+**/__pycache__/
+**/*.py[cod]
+
+# 其他
+AdminLTE/
+.venv/
+.claude/
+.git/
+.github/
+install.sh
+*.log

@@ -1,0 +1,6 @@
+# 本地源码构建覆盖配置：
+# docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  app:
+    build: .
+    image: message_info:local
