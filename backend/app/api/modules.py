@@ -231,7 +231,30 @@ def create_module(
                 column_width=fc.column_width,
             )
         )
-    audit.log(db, action="create", entity_type="module", entity_id=m.id, summary=m.code, actor=user.username)
+
+    copied_count = 0
+    if payload.copy_records_from_id:
+        src_module = db.get(Module, payload.copy_records_from_id)
+        if not src_module:
+            raise HTTPException(status_code=404, detail="源板块不存在")
+        src_records = db.scalars(
+            select(Record)
+            .where(Record.module_id == payload.copy_records_from_id, Record.is_deleted == False)  # noqa
+            .order_by(Record.id)
+        ).all()
+        for r in src_records:
+            db.add(
+                Record(
+                    module_id=m.id,
+                    data=r.data,
+                    is_deleted=False,
+                    created_by=r.created_by or user.id,
+                )
+            )
+            copied_count += 1
+
+    summary = f"{m.code} (复制记录 {copied_count} 条)" if copied_count else m.code
+    audit.log(db, action="create", entity_type="module", entity_id=m.id, summary=summary, actor=user.username)
     db.commit()
     return get_module(m.id, db, user)
 

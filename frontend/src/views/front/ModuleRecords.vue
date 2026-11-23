@@ -270,6 +270,14 @@
                 <td class="cell-mono cell-muted cell-last">
                   <span>{{ formatTime(row.updated_at) }}</span>
                   <div class="row-float-actions" @dblclick.stop>
+                    <button
+                      v-if="module?.access.can_create"
+                      class="icon-button sm primary"
+                      v-tip="'复制为新记录'"
+                      @click="duplicateRecord(row)"
+                    >
+                      <Copy />
+                    </button>
                     <button class="icon-button sm" v-tip="'复制文本'" @click="copyRecord(row)"><Clipboard /></button>
                     <button v-if="isAdmin" class="icon-button sm primary" v-tip="'分配给用户'" @click="openAccess(row)"><UserPlus /></button>
                     <button v-if="row.can_edit" class="icon-button sm primary" v-tip="'编辑 (或双击行)'" @click="openEdit(row)"><Pencil /></button>
@@ -357,6 +365,14 @@
             <Eye />查看详情
           </button>
           <button
+            v-if="module?.access.can_create"
+            type="button"
+            class="ovh-ctx-item"
+            @click="onCtxAct(() => duplicateRecord(ctxMenu.row!))"
+          >
+            <Copy />复制为新记录
+          </button>
+          <button
             type="button"
             class="ovh-ctx-item"
             @click="onCtxAct(() => copyRecord(ctxMenu.row!))"
@@ -388,7 +404,7 @@
     <!-- 编辑 / 新增记录抽屉 -->
     <BaseModal
       v-model="editDrawer"
-      :title="editing.readonly ? `查看记录 #${editing.id}` : editing.id ? `编辑记录 #${editing.id}` : '新增记录'"
+      :title="editing.readonly ? `查看记录 #${editing.id}` : editing.id ? `编辑记录 #${editing.id}` : editing.copyFromId ? `复制新增记录（基于 #${editing.copyFromId}）` : '新增记录'"
       drawer
       width="560px"
       :close-on-backdrop="false"
@@ -576,6 +592,7 @@ import {
   ArchiveRestore,
   ArrowRightLeft,
   Clipboard,
+  Copy,
   Eye,
   FunnelX,
   Inbox,
@@ -669,8 +686,9 @@ const colWidths = reactive<Record<string, number>>({})
 const editDrawer = ref(false)
 const trashDrawer = ref(false)
 const selectedTrashIds = ref<number[]>([])
-const editing = reactive<{ id: number | null; data: Record<string, any>; readonly: boolean }>({
+const editing = reactive<{ id: number | null; copyFromId: number | null; data: Record<string, any>; readonly: boolean }>({
   id: null,
+  copyFromId: null,
   data: {},
   readonly: false,
 })
@@ -957,6 +975,7 @@ async function openEdit(row?: RecordOut, readonly = false) {
   const id = moduleId.value
   if (!id) return
   editing.id = row?.id || null
+  editing.copyFromId = null
   editing.readonly = readonly
   if (row) {
     const { data: full } = await recordApi.get(id, row.id)
@@ -965,6 +984,25 @@ async function openEdit(row?: RecordOut, readonly = false) {
   } else {
     editing.data = {}
   }
+  editDrawer.value = true
+}
+
+async function duplicateRecord(row: RecordOut) {
+  const id = moduleId.value
+  if (!id || !module.value?.access.can_create) return
+  const { data: full } = await recordApi.get(id, row.id)
+  if (moduleId.value !== id) return
+  const allowedCodes = new Set((module.value?.fields || []).map((mf) => mf.field.code))
+  const cloned: Record<string, any> = {}
+  for (const [k, v] of Object.entries(full.data || {})) {
+    if (allowedCodes.has(k)) {
+      cloned[k] = Array.isArray(v) ? [...v] : v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v
+    }
+  }
+  editing.id = null
+  editing.copyFromId = row.id
+  editing.readonly = false
+  editing.data = cloned
   editDrawer.value = true
 }
 

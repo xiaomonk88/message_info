@@ -48,6 +48,7 @@ class ModuleBase(BaseModel):
 class ModuleCreate(ModuleBase):
     fields: list[ModuleFieldConfig] = []
     calculated_fields: list[CalculatedFieldConfig] = []
+    copy_records_from_id: Optional[int] = None
 
 
 class ModuleUpdate(BaseModel):

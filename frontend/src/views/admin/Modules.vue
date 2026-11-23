@@ -26,19 +26,20 @@
     </div>
 
     <div class="ovh-table-wrap">
-      <SkeletonTable v-if="loading && firstLoad" :rows="8" :cols="7" />
+      <SkeletonTable v-if="loading && firstLoad" :rows="8" :cols="8" />
       <div v-else class="table-responsive" v-loading="loading && !firstLoad">
         <table class="table table-hover align-middle">
           <thead>
             <tr>
-              <th style="width: 240px">板块</th>
-              <th style="width: 120px">分类</th>
-              <th class="text-end" style="width: 70px">字段</th>
-              <th class="text-end" style="width: 84px">记录</th>
-              <th class="text-end" style="width: 68px">排序</th>
-              <th style="width: 84px">状态</th>
-              <th style="width: 84px">图片</th>
+              <th style="width: 220px">板块</th>
+              <th style="width: 110px">分类</th>
+              <th class="text-end" style="width: 68px">字段</th>
+              <th class="text-end" style="width: 80px">记录</th>
+              <th class="text-end" style="width: 64px">排序</th>
+              <th style="width: 80px">状态</th>
+              <th style="width: 80px">图片</th>
               <th>说明</th>
+              <th class="text-end" style="width: 240px">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -54,7 +55,9 @@
               </td>
               <td><span class="badge badge-purple">{{ categoryName(row.category_id) }}</span></td>
               <td class="text-end cell-mono">{{ row.field_count }}</td>
-              <td class="text-end cell-mono fw-semibold text-primary">{{ row.record_count }}</td>
+              <td class="text-end cell-mono fw-semibold text-primary">
+                <RouterLink :to="`/m/${row.id}`" class="text-decoration-none" @dblclick.stop>{{ row.record_count }}</RouterLink>
+              </td>
               <td class="text-end cell-mono">{{ row.sort_order }}</td>
               <td>
                 <span class="badge badge-dot" :class="row.is_enabled ? 'text-bg-success' : 'text-bg-secondary'">
@@ -66,16 +69,21 @@
                   {{ row.auto_load_images ? '自动' : '手动' }}
                 </span>
               </td>
-              <td class="text-truncate cell-muted cell-last" style="max-width: 260px" :title="row.description || ''">
+              <td class="text-truncate cell-muted" style="max-width: 220px" :title="row.description || ''">
                 <span>{{ row.description || '—' }}</span>
-                <div class="row-float-actions" @dblclick.stop>
-                  <button class="icon-button sm" v-tip="'查看记录'" @click="$router.push(`/m/${row.id}`)">
-                    <ExternalLink />
+              </td>
+              <td class="text-end" @dblclick.stop>
+                <div class="row-actions">
+                  <button class="btn btn-sm btn-outline-secondary" v-tip="'进入板块查看数据'" @click="$router.push(`/m/${row.id}`)">
+                    <ExternalLink />数据
                   </button>
-                  <button class="icon-button sm primary" v-tip="'编辑配置 (或双击行)'" @click="openDialog(row)">
-                    <SquarePen />
+                  <button class="btn btn-sm btn-outline-primary" v-tip="'以此板块为模板复制新建'" @click="duplicateModule(row)">
+                    <Copy />复制
                   </button>
-                  <button class="icon-button sm danger" v-tip="'删除板块'" @click="remove(row)">
+                  <button class="btn btn-sm btn-outline-secondary" v-tip="'编辑板块配置 (或双击行)'" @click="openDialog(row)">
+                    <SquarePen />编辑
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" v-tip="'删除板块'" @click="remove(row)">
                     <Trash2 />
                   </button>
                 </div>
@@ -97,8 +105,21 @@
       </div>
     </div>
 
-    <!-- 新建 / 编辑板块 -->
-    <BaseModal v-model="dialog" :title="form.id ? `编辑板块 · ${form.name || form.code}` : '新建板块'" size="xl" :close-on-backdrop="false">
+    <!-- 新建 / 复制 / 编辑板块 -->
+    <BaseModal
+      v-model="dialog"
+      :title="modalTitle"
+      size="xl"
+      :close-on-backdrop="false"
+    >
+      <div v-if="copySource" class="callout mb-3">
+        <Copy />
+        <span>
+          正在基于板块 <strong>{{ copySource.name }}</strong>（<code>{{ copySource.code }}</code>）复制创建新板块，已自动带入全部
+          <strong>{{ form.fields.length }}</strong> 个字段配置与 <strong>{{ form.calculated_fields.length }}</strong> 个计算字段。请修改新板块的编码与名称后保存。
+        </span>
+      </div>
+
       <BaseTab v-model="tab">
         <BaseTabPane name="base" label="基础信息">
           <div class="row g-3">
@@ -106,6 +127,7 @@
               <label class="form-label">编码 <span class="text-danger">*</span></label>
               <input v-model="form.code" class="form-control" :disabled="!!form.id" placeholder="英文/数字/下划线，如 server_list" />
               <small v-if="form.id" class="form-hint">编码创建后不可修改</small>
+              <small v-else-if="copySource" class="form-hint">需以字母开头，仅含字母、数字或下划线（不可与现有板块重名）</small>
             </div>
             <div class="col-md-6">
               <label class="form-label">名称 <span class="text-danger">*</span></label>
@@ -144,6 +166,17 @@
                 </span>
               </label>
             </div>
+            <div v-if="copySource && copySource.record_count > 0" class="col-12">
+              <label class="option-card" :class="{ 'is-on': copySource.copyRecords }">
+                <input v-model="copySource.copyRecords" class="form-check-input" type="checkbox" />
+                <span>
+                  <span class="option-card-title d-block">同时复制原板块中的现有记录数据（共 {{ copySource.record_count }} 条）</span>
+                  <span class="option-card-desc d-block">
+                    {{ copySource.copyRecords ? '新建后将一并克隆原板块内的全部记录数据' : '默认不勾选：仅复制板块结构与字段配置，创建全新的空数据板块' }}
+                  </span>
+                </span>
+              </label>
+            </div>
             <div class="col-12">
               <label class="form-label">板块说明</label>
               <textarea v-model="form.description" class="form-control" rows="2" placeholder="填写该板块的用途简述…"></textarea>
@@ -162,6 +195,17 @@
             <button class="btn btn-primary" :disabled="!addingFieldId" @click="addField">
               <Plus />添加
             </button>
+            <template v-if="importableModules.length">
+              <select v-model="importModuleId" class="form-select import-select">
+                <option :value="null">从已有板块导入字段…</option>
+                <option v-for="m in importableModules" :key="m.id" :value="m.id">
+                  {{ m.name }} ({{ m.field_count }} 个字段)
+                </option>
+              </select>
+              <button class="btn btn-outline-primary" :disabled="!importModuleId" @click="importFieldsFromModule">
+                <Copy />导入字段
+              </button>
+            </template>
             <button class="btn btn-outline-secondary" @click="$router.push('/admin/fields')">
               <ExternalLink />管理字段库
             </button>
@@ -212,7 +256,7 @@
           </div>
           <div v-else class="empty-box">
             <ListPlus />
-            <span>尚未添加任何字段，请从上方字段库中选择</span>
+            <span>尚未添加任何字段，可从上方字段库选择，或直接从已有板块导入</span>
           </div>
           <small v-if="form.fields.length" class="form-hint mt-2">拖动左侧手柄调整字段顺序，顺序即表单与列表中的显示顺序。</small>
         </BaseTabPane>
@@ -291,7 +335,7 @@
         </span>
         <button class="btn btn-outline-secondary" @click="dialog = false">取消</button>
         <button class="btn btn-primary" :disabled="saving" @click="save">
-          <span v-if="saving" class="spinner-border spinner-border-sm"></span>保存板块
+          <span v-if="saving" class="spinner-border spinner-border-sm"></span>{{ copySource ? '创建复制板块' : '保存板块' }}
         </button>
       </template>
     </BaseModal>
@@ -303,6 +347,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import draggable from 'vuedraggable'
 import {
   Calculator,
+  Copy,
   ExternalLink,
   GripVertical,
   LayoutGrid,
@@ -340,8 +385,17 @@ const dialog = ref(false)
 const saving = ref(false)
 const tab = ref('base')
 const addingFieldId = ref<number | null>(null)
+const importModuleId = ref<number | null>(null)
 const keyword = ref('')
 const nav = useNavStore()
+
+const copySource = ref<{
+  id: number
+  name: string
+  code: string
+  record_count: number
+  copyRecords: boolean
+} | null>(null)
 
 const form = reactive<any>({
   id: null,
@@ -349,6 +403,12 @@ const form = reactive<any>({
   sort_order: 0, is_enabled: true, auto_load_images: true, category_id: null,
   fields: [] as { field_id: number; sort_order: number; is_required: boolean; show_in_list: boolean; column_width: number | null }[],
   calculated_fields: [] as any[],
+})
+
+const modalTitle = computed(() => {
+  if (form.id) return `编辑板块 · ${form.name || form.code}`
+  if (copySource.value) return `复制新建板块 · 来源：${copySource.value.name}`
+  return '新建板块'
 })
 
 const filteredList = computed(() => {
@@ -366,6 +426,10 @@ const availableFields = computed(() =>
   fields.value.filter((f) => !form.fields.find((x: any) => x.field_id === f.id))
 )
 
+const importableModules = computed(() =>
+  list.value.filter((m) => m.id !== form.id && m.field_count > 0)
+)
+
 const moduleSelectedFields = computed(() =>
   form.fields.map((item: any) => fieldOf(item.field_id)).filter(Boolean) as FieldDef[]
 )
@@ -381,6 +445,18 @@ function typeLabel(t: string) {
 }
 function categoryName(id?: number | null) {
   return categories.value.find((c) => c.id === id)?.name || '-'
+}
+
+function suggestCopyCode(baseCode: string) {
+  const existing = new Set(list.value.map((m) => m.code.toLowerCase()))
+  const cleanBase = baseCode.replace(/_copy(_\d+)?$/i, '').slice(0, 50) || 'module'
+  let candidate = `${cleanBase}_copy`
+  let seq = 2
+  while (existing.has(candidate.toLowerCase())) {
+    candidate = `${cleanBase}_copy_${seq}`
+    seq++
+  }
+  return candidate
 }
 
 async function load() {
@@ -404,6 +480,8 @@ async function load() {
 
 async function openDialog(row?: ModuleListItem) {
   tab.value = 'base'
+  copySource.value = null
+  importModuleId.value = null
   if (row) {
     const { data: full } = await moduleApi.get(row.id)
     Object.assign(form, {
@@ -428,6 +506,71 @@ async function openDialog(row?: ModuleListItem) {
   dialog.value = true
 }
 
+async function duplicateModule(row: ModuleListItem) {
+  tab.value = 'base'
+  importModuleId.value = null
+  const { data: full } = await moduleApi.get(row.id)
+  copySource.value = {
+    id: full.id,
+    name: full.name,
+    code: full.code,
+    record_count: row.record_count,
+    copyRecords: false,
+  }
+  Object.assign(form, {
+    id: null,
+    code: suggestCopyCode(full.code),
+    name: `${full.name}_副本`,
+    icon: full.icon,
+    description: full.description || '',
+    sort_order: full.sort_order,
+    is_enabled: full.is_enabled,
+    auto_load_images: full.auto_load_images,
+    category_id: full.category_id,
+    fields: full.fields.map((mf) => ({
+      field_id: mf.field_id,
+      sort_order: mf.sort_order,
+      is_required: mf.is_required,
+      show_in_list: mf.show_in_list,
+      column_width: mf.column_width || null,
+    })),
+    calculated_fields: (full.calculated_fields || []).map((item) => ({ ...item })),
+  })
+  dialog.value = true
+}
+
+async function importFieldsFromModule() {
+  if (!importModuleId.value) return
+  const { data: src } = await moduleApi.get(importModuleId.value)
+  let added = 0
+  for (const mf of src.fields) {
+    if (!form.fields.some((x: any) => x.field_id === mf.field_id)) {
+      form.fields.push({
+        field_id: mf.field_id,
+        sort_order: form.fields.length + 1,
+        is_required: mf.is_required,
+        show_in_list: mf.show_in_list,
+        column_width: mf.column_width || null,
+      })
+      added++
+    }
+  }
+  let addedCalc = 0
+  for (const cf of src.calculated_fields || []) {
+    if (!form.calculated_fields.some((x: any) => x.code === cf.code)) {
+      form.calculated_fields.push({ ...cf })
+      addedCalc++
+    }
+  }
+  importModuleId.value = null
+  toast(
+    added || addedCalc
+      ? `已从「${src.name}」导入 ${added} 个字段${addedCalc ? `、${addedCalc} 个计算字段` : ''}`
+      : `「${src.name}」中的字段均已在列表中`,
+    'success'
+  )
+}
+
 function addField() {
   if (!addingFieldId.value) return
   form.fields.push({
@@ -444,7 +587,7 @@ function addCalculatedField() {
   form.calculated_fields.push({
     name: '剩余价值',
     code: `calc_remain_${form.calculated_fields.length + 1}`,
-    formula_type: 'linear_depreciation',
+    type: 'remaining_value_by_date',
     amount_field: '',
     start_field: '',
     end_field: '',
@@ -463,17 +606,22 @@ async function save() {
   }
   saving.value = true
   try {
-    const payload = {
+    const payload: any = {
       ...form,
       fields: form.fields.map((f: any, idx: number) => ({ ...f, sort_order: idx + 1 })),
     }
+    if (!form.id && copySource.value?.copyRecords) {
+      payload.copy_records_from_id = copySource.value.id
+    }
     if (form.id) {
       await moduleApi.update(form.id, payload)
+      toast('板块配置已保存', 'success')
     } else {
       await moduleApi.create(payload)
+      toast(copySource.value ? '已复制创建新板块' : '板块已创建', 'success')
     }
-    toast('板块配置已保存', 'success')
     dialog.value = false
+    copySource.value = null
     await load()
     await nav.refresh()
   } finally {
@@ -493,6 +641,13 @@ onMounted(load)
 </script>
 
 <style scoped>
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .add-field-bar {
   display: flex;
   flex-wrap: wrap;
@@ -501,8 +656,13 @@ onMounted(load)
 }
 
 .add-field-bar .form-select {
-  flex: 1 1 320px;
-  max-width: 480px;
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+
+.add-field-bar .import-select {
+  flex: 0 1 220px;
+  max-width: 240px;
 }
 
 /* ---------- 字段配置列表 ---------- */
