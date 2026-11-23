@@ -157,6 +157,8 @@ jobs:
           curl -fsS http://127.0.0.1:17500/ | grep -q "Message_Info Console"
           FONT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:17500/fonts/misans/MiSans-VF.woff2)
           test "$FONT_STATUS" = "200"
+          DOCS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:17500/api/v1/docs)
+          test "$DOCS_STATUS" = "404"
           test -f /tmp/smoke_data/db/app.db
           test -f /tmp/smoke_data/secrets/jwt_secret
           test -f /tmp/smoke_data/secrets/encryption_key

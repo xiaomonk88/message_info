@@ -120,7 +120,6 @@ echo.
 echo  ====================================================
 echo   Message_Info is running
 echo   Open : http://localhost:%PORT%
-echo   API  : http://localhost:%PORT%/api/v1/docs
 echo   Stop : close this window, or press Ctrl+C
 echo  ====================================================
 echo.

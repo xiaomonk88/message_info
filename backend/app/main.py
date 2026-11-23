@@ -32,9 +32,9 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version="0.1.0",
     lifespan=lifespan,
-    openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
-    docs_url=f"{settings.API_V1_PREFIX}/docs",
-    redoc_url=f"{settings.API_V1_PREFIX}/redoc",
+    openapi_url=None,
+    docs_url=None,
+    redoc_url=None,
 )
 
 # CORS — allow dev frontend origin
@@ -91,6 +91,5 @@ else:
     def root():
         return {
             "name": settings.PROJECT_NAME,
-            "docs": f"{settings.API_V1_PREFIX}/docs",
             "note": "Frontend not built. Run `npm run dev` in frontend/.",
         }

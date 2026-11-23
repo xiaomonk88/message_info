@@ -141,12 +141,6 @@ message_info/
 
 ---
 
-## 五、API 文档
-
-启动后可访问交互式 OpenAPI 文档：
-- Docker 部署：`http://<host>:17500/api/v1/docs`
-- 本地启动：`http://localhost:8010/api/v1/docs`
-
 ## License
 
 MIT

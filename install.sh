@@ -261,7 +261,6 @@ EOF
   fi
   echo -e "${GREEN}=========================================================${NC}"
   echo -e " 访问地址   : ${BOLD}http://${ip}:${port_val}${NC}"
-  echo -e " 接口文档   : http://${ip}:${port_val}/api/v1/docs"
   if [ "$is_first_install" -eq 1 ]; then
     echo -e " 管理员账号 : ${BOLD}${admin_user}${NC}"
     echo -e " 初始密码   : ${BOLD}${admin_pass}${NC}  ${YELLOW}(请登录后在「账号设置」及时修改)${NC}"
