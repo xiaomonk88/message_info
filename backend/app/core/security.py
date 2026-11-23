@@ -44,6 +44,12 @@ def decode_token(token: str) -> Optional[dict]:
 _fernet: Optional[Fernet] = None
 
 
+def reset_fernet_cache() -> None:
+    global _fernet
+    encryption_key.cache_clear()
+    _fernet = None
+
+
 def _get_fernet() -> Fernet:
     global _fernet
     if _fernet is None:

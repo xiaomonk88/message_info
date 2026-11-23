@@ -1,12 +1,14 @@
+import secrets
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.database import SessionLocal
 from app.core.deps import db_session, get_current_user, require_admin
 from app.models.grant import Attachment, ModuleGrant, RecordGrant
 from app.models.user import User
@@ -42,6 +44,7 @@ from app.services.backup import (
     list_backups,
     restore_backup,
     save_schedule,
+    save_uploaded_backup,
 )
 from app.services.sftp_backup import (
     get_sftp_config,
@@ -227,6 +230,63 @@ def download_backup(filename: str, _: User = Depends(require_admin)):
     if not target.exists():
         raise HTTPException(status_code=404, detail="备份不存在")
     return FileResponse(target, filename=filename, media_type="application/octet-stream")
+
+
+@router.post("/backup/upload")
+async def upload_backup_api(
+    file: UploadFile = File(...),
+    restore_now: bool = Query(True),
+    user: User = Depends(require_admin),
+):
+    raw_name = file.filename or ""
+    suffix = Path(raw_name).suffix.lower()
+    if suffix not in {".db", ".zip"}:
+        raise HTTPException(status_code=400, detail="仅支持上传 .zip（完整备份）或 .db（数据库快照）文件")
+
+    max_bytes = 512 * 1024 * 1024  # 512 MB
+    backup_dir = settings.backup_dir_path
+    temp_path = backup_dir / f".upload_{secrets.token_hex(8)}.tmp"
+    total = 0
+
+    try:
+        with temp_path.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(status_code=413, detail="备份文件超过 512MB 限制")
+                out.write(chunk)
+        if total == 0:
+            raise HTTPException(status_code=400, detail="上传的备份文件为空")
+
+        result = save_uploaded_backup(raw_name, temp_path, restore_now=restore_now)
+    finally:
+        await file.close()
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+    try:
+        db = SessionLocal()
+        try:
+            audit.log(
+                db,
+                action="上传并恢复备份" if restore_now else "上传备份文件",
+                entity_type="system",
+                summary=f"本地上传备份 {result['filename']} ({total} bytes)" + (" 并已完成恢复" if restore_now else ""),
+                actor=user.username,
+            )
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+    return result
 
 
 # ---------- 危险操作 ----------

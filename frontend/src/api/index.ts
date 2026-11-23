@@ -340,7 +340,24 @@ export const systemApi = {
   testSftp: () => http.post('/system/backup/sftp/test'),
   syncLatestSftp: () => http.post('/system/backup/sftp/sync-latest'),
   downloadBackup: (filename: string) =>
-    http.get(`/system/backup/download/${encodeURIComponent(filename)}`, { responseType: 'blob' }),
+    http.get(`/system/backup/download/${encodeURIComponent(filename)}`, {
+      responseType: 'blob',
+      timeout: 0,
+    }),
+  uploadBackup: (file: File, restoreNow = true) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post<{
+      filename: string
+      type: 'database' | 'full'
+      size: number
+      created_at: string
+      restored: boolean
+    }>(`/system/backup/upload?restore_now=${restoreNow}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+    })
+  },
   clearAllRecords: (confirm: string) =>
     http.post<{ deleted_records: number; deleted_uploads: number }>(
       '/system/danger/clear-records',

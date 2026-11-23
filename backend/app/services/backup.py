@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+import re
 import shutil
 import sqlite3
 import zipfile
@@ -7,11 +9,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from cryptography.fernet import Fernet
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal, engine
+from app.core.secrets import _is_placeholder, encryption_key
+from app.core.security import reset_fernet_cache
 from app.models.app_config import AppConfig
 
 SCHEDULE_KEY = "backup.schedule"
@@ -151,10 +156,12 @@ def create_full_backup(prefix: str = "full_backup", remote_trigger: str | None =
             "created_at": _now().isoformat(timespec="seconds"),
             "database": "db/app.db",
             "includes_uploads": True,
+            "includes_encryption_key": True,
         }
         with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
             zf.write(temp_db, "db/app.db")
+            zf.writestr("secrets/encryption_key", encryption_key().decode("utf-8"))
             for path in upload_root.rglob("*"):
                 if not path.is_file():
                     continue
@@ -303,6 +310,25 @@ def restore_full_backup(filename: str) -> dict[str, Any]:
                 with zf.open(member, "r") as src_file, target.open("wb") as out_file:
                     shutil.copyfileobj(src_file, out_file)
                 restored_uploads += 1
+
+            restored_key = False
+            if "secrets/encryption_key" in zf.namelist() and _is_placeholder(settings.ENCRYPTION_KEY):
+                raw_key = zf.read("secrets/encryption_key").decode("utf-8", errors="ignore").strip()
+                if raw_key:
+                    try:
+                        Fernet(raw_key.encode("utf-8"))
+                        secrets_dir = settings.data_dir_path / "secrets"
+                        secrets_dir.mkdir(parents=True, exist_ok=True)
+                        key_path = secrets_dir / "encryption_key"
+                        key_path.write_text(raw_key, encoding="utf-8")
+                        try:
+                            os.chmod(key_path, 0o600)
+                        except OSError:
+                            pass
+                        reset_fernet_cache()
+                        restored_key = True
+                    except ValueError:
+                        pass
         finally:
             if temp_db.exists():
                 temp_db.unlink()
@@ -310,7 +336,51 @@ def restore_full_backup(filename: str) -> dict[str, Any]:
     from app.services.bootstrap import init_database
 
     init_database()
-    return {"filename": filename, "type": "full", "restored_uploads": restored_uploads}
+    return {
+        "filename": filename,
+        "type": "full",
+        "restored_uploads": restored_uploads,
+        "restored_encryption_key": restored_key,
+    }
+
+
+def save_uploaded_backup(raw_filename: str, temp_path: Path, *, restore_now: bool = True) -> dict[str, Any]:
+    """校验用户从本地上传的 .zip / .db 备份文件，转存至备份目录并按需立即恢复。"""
+    clean_name = Path(raw_filename or "").name.strip()
+    suffix = Path(clean_name).suffix.lower()
+    if suffix not in {".db", ".zip"}:
+        raise HTTPException(status_code=400, detail="仅支持上传 .zip（完整备份）或 .db（数据库快照）文件")
+
+    stem = re.sub(r"[^\w.\-\u4e00-\u9fa5]+", "_", Path(clean_name).stem).strip("._-") or "uploaded_backup"
+    stem = stem[:80]
+    backup_dir = settings.backup_dir_path
+    final_name = f"{stem}{suffix}"
+    dest = backup_dir / final_name
+    if dest.exists():
+        final_name = f"{stem}_{_now().strftime('%Y%m%d_%H%M%S')}{suffix}"
+        dest = backup_dir / final_name
+
+    if suffix == ".zip":
+        _validate_full_backup(temp_path)
+    else:
+        _validate_sqlite_file(temp_path)
+
+    shutil.move(str(temp_path), str(dest))
+    stat = dest.stat()
+    result: dict[str, Any] = {
+        "filename": final_name,
+        "type": _backup_type(dest),
+        "size": stat.st_size,
+        "created_at": datetime.fromtimestamp(stat.st_mtime),
+        "restored": False,
+    }
+
+    if restore_now:
+        restore_info = restore_backup(final_name)
+        result["restored"] = True
+        result["restore_detail"] = restore_info
+
+    return result
 
 
 def get_schedule(db: Session) -> dict[str, Any]:
